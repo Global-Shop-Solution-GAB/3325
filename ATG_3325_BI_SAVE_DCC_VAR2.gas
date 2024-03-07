@@ -1,0 +1,176 @@
+Program.Sub.ScreenSU.Start
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Hook number 16090
+
+V.local.shold.Declare(String)
+
+F.ODBC.Connection!conx.OpenConnection(V.Ambient.PDSN,V.Ambient.Puser,V.Ambient.PPass)
+F.Intrinsic.String.Concat("SELECT RPT_ID FROM BI_CALL WHERE CALL_KEY = '",V.Passed.009000,"'",V.Local.shold)
+F.ODBC.Connection!conx.OpenRecordsetRO("rst",V.Local.shold)
+F.Intrinsic.Debug.Stop
+
+F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,=,False)
+	F.Intrinsic.Control.If(V.ODBC.conx!rst.FieldValTrim!RPT_ID,=,"000051")
+		F.ODBC.conx!rst.Close
+		'do something here
+		F.Intrinsic.Control.CallSub(Process_packingslip)
+	F.Intrinsic.Control.elseIf(V.ODBC.conx!rst.FieldValTrim!RPT_ID,=,"000054")
+		F.ODBC.conx!rst.Close
+		'do something here
+		F.Intrinsic.Control.CallSub(Process_ack)
+	F.Intrinsic.Control.ElseIf(V.ODBC.conx!rst.FieldValTrim!RPT_ID,=,"000055")
+		F.ODBC.conx!rst.Close
+		'do something here
+		F.Intrinsic.Control.CallSub(Process_invoice)
+	F.Intrinsic.Control.Else
+		F.ODBC.conx!rst.Close
+		F.ODBC.Connection!conx.close
+		F.Intrinsic.Control.end
+	F.Intrinsic.Control.endif
+F.Intrinsic.Control.ElseIf(V.ODBC.conx!rst.EOF,=,True)
+	F.ODBC.conx!rst.Close
+	F.ODBC.Connection!conx.close
+	F.Intrinsic.Control.end
+F.Intrinsic.Control.EndIf
+
+F.ODBC.Connection!conx.Close
+
+Program.Sub.Main.End
+
+Program.Sub.process_packingslip.Start
+V.Local.sOrder.Declare(String)
+V.Local.sSuffix.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.sQuery.Declare(String)
+V.Local.sValues.Declare(String)
+V.Local.sParam.Declare(String)
+V.Local.sDescription.Declare(String)
+V.Local.sKey.Declare(String)
+V.Local.iID.Declare(Long)
+
+F.Intrinsic.String.Concat("SELECT TOP 1 ORDER_NO, ORDER_SUFFIX, SHIPPING_NO FROM BI_PACKING_LIST WHERE TERMINAL = '",V.Caller.Terminal,"'",V.Local.sQuery)
+F.ODBC.Connection!conx.OpenRecordsetRO("rstOrder",V.Local.sQuery)
+
+F.Intrinsic.Control.dountil(V.ODBC.conx!rstOrder.EOF,=,True)
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\PL-",V.odbc.conx!rstOrder.FieldValTrim!ORDER_NO,"-",V.ODBC.conx!rstOrder.FieldValTrim!ORDER_SUFFIX,".pdf",V.local.sFile)
+	V.Local.sOrder.Set(V.ODBC.conx!rstOrder.FieldValTrim!ORDER_NO)
+	V.Local.sSuffix.Set(V.ODBC.conx!rstOrder.FieldValTrim!ORDER_SUFFIX)
+
+
+	F.Intrinsic.String.Concat("000051*!*",V.Caller.Terminal,V.Local.sValues)
+	V.Local.sParam.set("ReportID*!*TERMINAL")
+	F.Intrinsic.String.Split(V.Local.sValues,"*!*",V.Local.sValues)
+	F.Intrinsic.String.Split(V.Local.sParam,"*!*",V.Local.sParam)
+
+	F.Intrinsic.Control.If(V.Local.sFile.Trim,<>,"")
+		F.Global.BI.SaveReport("000051",0,V.Local.sParam,V.Local.sValues,V.Local.sFile)
+		'future DCC add doc
+		F.Global.DocumentControl.CreateReference(V.Local.sOrder,"45",V.Local.iID)
+		F.Global.DocumentControl.AddDocument(V.Local.iID,V.Local.sFile,"",9,"PDF")
+
+	F.Intrinsic.Control.endif
+
+	F.ODBC.conx!rstOrder.MoveNext
+
+F.Intrinsic.Control.loop
+F.ODBC.conx!rstOrder.Close
+
+Program.Sub.process_packingslip.End
+
+Program.Sub.process_invoice.Start
+V.Local.sOrder.Declare(String)
+V.Local.sSuffix.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.sQuery.Declare(String)
+V.Local.sValues.Declare(String)
+V.Local.sParam.Declare(String)
+V.Local.sDescription.Declare(String)
+V.Local.sKey.Declare(String)
+V.Local.iID.Declare(Long)
+V.Local.bID.Declare(Boolean)
+V.Local.sVersion.Declare(String)
+
+F.ODBC.Connection!conx.OpenRecordsetRO("rstID","SELECT RPT_ID FROM BI_RPT WHERE RPT_ID = '006021'")
+F.Intrinsic.Control.If(V.ODBC.conx!rstID.EOF,=,True)
+	F.ODBC.Connection!conx.Execute("insert into bi_rpt(RPT_ID,RPT_SEQ,DESCRIPTION,CRYSTAL_FILE_NAME,ACTIVE_FLAG,CREATION_FLAG,RPT_TYPE,OUTPUT_OPT,BRTNDR_NO_EXIT,OVERRIDE_FLAG,OVERRIDE_RPT,FILLER1) VALUES ('006021', '0001', 'Invoice- Added Parmeter', '..\busint\OE_INVOICE_ATG_SPP.rpt', 'Y', 'G', 'C', '0', ' ', 'N', ' ', ' ')")
+F.Intrinsic.Control.EndIf
+F.ODBC.conx!rstID.close
+
+F.Intrinsic.String.Concat("SELECT DISTINCT ORDER_NO, INVOICE_NO FROM PRT_LASER_INVOICE WHERE TERMINAL_NO = '",V.Caller.Terminal,"'",V.Local.sQuery)
+F.ODBC.Connection!conx.OpenRecordsetRO("rstOrder",V.Local.sQuery)
+
+F.Intrinsic.Control.DoUntil(V.ODBC.conx!rstOrder.EOF,=,True)
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\INVOICE-",V.odbc.conx!rstOrder.FieldValTrim!INVOICE_NO,"-",V.ODBC.conx!rstOrder.FieldValTrim!ORDER_NO,".pdf",V.local.sFile)
+	V.Local.sOrder.Set(V.ODBC.conx!rstOrder.FieldValTrim!ORDER_NO)
+	F.Intrinsic.String.Left(V.Local.sOrder,7,V.Local.sOrder)
+	V.Local.sSuffix.Set(V.ODBC.conx!rstOrder.FieldValTrim!INVOICE_NO)
+	F.Intrinsic.Debug.Stop
+	
+	F.Intrinsic.String.Left(V.Caller.GSSVersion,4,V.Local.sVersion)
+	F.Intrinsic.Control.If(V.Local.sVersion,<,2010)
+		F.Intrinsic.String.Concat("000055*!*",V.Caller.Terminal,"*!*",V.ODBC.conx!rstOrder.FieldVal!ORDER_NO,"*!* *!*",V.Caller.Caller,"*!*",V.Local.sValues)
+		V.Local.sParam.set("REPORTID*!*TERMINAL*!*ORDERNO*!*COMMIVC*!*PROGRAM*!*TRACK")
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Concat("000055*!*",V.Caller.Terminal,"*!*",V.ODBC.conx!rstOrder.FieldVal!ORDER_NO,"*!* *!*",V.Caller.Caller,"*!* *!* *!* *!* ",V.Local.sValues)
+		V.Local.sParam.set("REPORTID*!*TERMINAL*!*ORDERNO*!*COMMIVC*!*PROGRAM*!*TRACK*!*PRTORD*!*IVCTYPE*!*PRTSHIP")
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.String.Split(V.Local.sValues,"*!*",V.Local.sValues)
+	F.Intrinsic.String.Split(V.Local.sParam,"*!*",V.Local.sParam)
+
+	F.Intrinsic.Control.If(V.Local.sFile.Trim,<>,"")
+		F.Global.BI.SaveReport("006021",0,V.Local.sParam,V.Local.sValues,V.Local.sFile)
+		'future DCC add doc
+		F.Global.DocumentControl.CreateReference(V.Local.sOrder,"45",V.Local.iID)
+		F.Global.DocumentControl.AddDocument(V.Local.iID,V.Local.sFile,"",8,"PDF")
+	F.Intrinsic.Control.endif
+	F.ODBC.conx!rstOrder.MoveNext
+F.Intrinsic.Control.Loop
+
+F.ODBC.conx!rstOrder.Close
+
+Program.Sub.process_invoice.End
+
+Program.Sub.process_ack.Start
+
+V.Local.sOrder.Declare(String)
+V.Local.sSuffix.Declare(String)
+V.Local.sFile.Declare(String)
+V.Local.sQuery.Declare(String)
+V.Local.sValues.Declare(String)
+V.Local.sParam.Declare(String)
+V.Local.sDescription.Declare(String)
+V.Local.sKey.Declare(String)
+V.Local.iID.Declare(Long)
+F.Intrinsic.Debug.Stop
+
+F.Intrinsic.String.Concat("SELECT TOP 1 ORDER_NO FROM BI_ACKNWLDGMNT WHERE TERMINAL = '",V.Caller.Terminal,"'",V.Local.sQuery)
+F.ODBC.Connection!conx.OpenRecordsetRO("rstOrder",V.Local.sQuery)
+F.Intrinsic.Debug.Stop
+
+F.Intrinsic.Control.dountil(V.ODBC.conx!rstOrder.EOF,=,True)
+	F.Intrinsic.String.Concat(V.Caller.FilesDir,"\ACK-",V.odbc.conx!rstOrder.FieldValTrim!ORDER_NO,".pdf",V.local.sFile)
+	F.Intrinsic.String.Concat("000054*!*",V.Caller.Terminal,"*!**!*",V.Local.sValues)
+	V.Local.sParam.set("REPORTID*!*TERMINAL*!*DEC*!*INCLUDESTAX")
+	F.Intrinsic.String.Split(V.Local.sValues,"*!*",V.Local.sValues)
+	F.Intrinsic.String.Split(V.Local.sParam,"*!*",V.Local.sParam)
+	F.Intrinsic.Control.If(V.Local.sFile.Trim,<>,"")
+		F.Global.BI.SaveReport("000054",0,V.Local.sParam,V.Local.sValues,V.Local.sFile)
+		'future DCC add doc
+		F.Global.DocumentControl.CreateReference(V.odbc.conx!rstOrder.FieldValTrim!ORDER_NO,"45",V.Local.iID)
+		F.Global.DocumentControl.AddDocument(V.Local.iID,V.Local.sFile,"",10,"PDF")
+	F.Intrinsic.Control.endif
+
+	F.ODBC.conx!rstOrder.MoveNext
+
+F.Intrinsic.Control.loop
+F.ODBC.conx!rstOrder.Close
+
+Program.Sub.process_ack.End
+
+
